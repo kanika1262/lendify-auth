@@ -14,6 +14,9 @@ export interface Loan {
   createdAt: string;
   dueDate: string;
   loanType?: string;
+  interest_rate?: number;
+  term?: number;
+  borrower_name?: string;
 }
 
 interface LoanCardProps {

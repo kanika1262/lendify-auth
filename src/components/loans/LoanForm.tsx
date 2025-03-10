@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { v4 as uuidv4 } from 'uuid';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
 import { Loan } from './LoanCard';
+import { supabase } from '@/integrations/supabase/client';
 
 interface LoanFormProps {
   editLoan?: Loan;
@@ -23,9 +23,12 @@ const LoanForm = ({ editLoan }: LoanFormProps) => {
   const [formData, setFormData] = useState({
     amount: editLoan?.amount.toString() || '',
     purpose: editLoan?.purpose || '',
-    description: '',
+    description: editLoan?.description || '',
     dueDate: editLoan?.dueDate.split('T')[0] || '',
-    loanType: 'personal',
+    loanType: editLoan?.loanType || 'personal',
+    term: editLoan?.term?.toString() || '12',
+    interestRate: editLoan?.interest_rate?.toString() || '5.0',
+    borrowerName: editLoan?.borrower_name || ''
   });
   
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -46,7 +49,7 @@ const LoanForm = ({ editLoan }: LoanFormProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.amount || !formData.purpose || !formData.dueDate) {
+    if (!formData.amount || !formData.purpose || !formData.dueDate || !formData.borrowerName) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -59,49 +62,67 @@ const LoanForm = ({ editLoan }: LoanFormProps) => {
     
     setIsLoading(true);
     
+    const dueDate = new Date(formData.dueDate);
+    const startDate = new Date();
+    
     try {
-      // Simulating API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const { data: userSession } = await supabase.auth.getSession();
       
-      // Get existing loans or initialize empty array
-      const existingLoans = JSON.parse(localStorage.getItem('loans') || '[]');
+      if (!userSession.session) {
+        toast.error('You must be logged in to submit a loan application');
+        navigate('/login');
+        return;
+      }
+      
+      const userId = userSession.session.user.id;
       
       if (editLoan) {
         // Update existing loan
-        const updatedLoans = existingLoans.map((loan: Loan) => 
-          loan.id === editLoan.id
-            ? {
-                ...loan,
-                amount,
-                purpose: formData.purpose,
-                dueDate: new Date(formData.dueDate).toISOString(),
-                updatedAt: new Date().toISOString(),
-              }
-            : loan
-        );
+        const { error } = await supabase
+          .from('loans')
+          .update({
+            amount,
+            purpose: formData.purpose,
+            description: formData.description,
+            interest_rate: parseFloat(formData.interestRate),
+            term: parseInt(formData.term),
+            borrower_name: formData.borrowerName,
+            start_date: startDate.toISOString().split('T')[0],
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editLoan.id);
         
-        localStorage.setItem('loans', JSON.stringify(updatedLoans));
+        if (error) {
+          throw error;
+        }
+        
         toast.success('Loan updated successfully');
       } else {
         // Create new loan
-        const newLoan = {
-          id: uuidv4(),
-          amount,
-          purpose: formData.purpose,
-          description: formData.description,
-          status: 'pending',
-          loanType: formData.loanType,
-          createdAt: new Date().toISOString(),
-          dueDate: new Date(formData.dueDate).toISOString(),
-        };
+        const { error } = await supabase
+          .from('loans')
+          .insert([{
+            user_id: userId,
+            amount,
+            purpose: formData.purpose,
+            description: formData.description,
+            status: 'pending',
+            interest_rate: parseFloat(formData.interestRate),
+            term: parseInt(formData.term),
+            borrower_name: formData.borrowerName,
+            start_date: startDate.toISOString().split('T')[0]
+          }]);
         
-        localStorage.setItem('loans', JSON.stringify([...existingLoans, newLoan]));
+        if (error) {
+          throw error;
+        }
+        
         toast.success('Loan application submitted');
       }
       
       navigate('/loans');
-    } catch (error) {
-      toast.error('Failed to submit loan application');
+    } catch (error: any) {
+      toast.error(`Failed to submit loan application: ${error.message}`);
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -164,6 +185,53 @@ const LoanForm = ({ editLoan }: LoanFormProps) => {
               onChange={handleChange}
               rows={4}
             />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="borrowerName" className="required">Borrower Name</Label>
+            <Input
+              id="borrowerName"
+              name="borrowerName"
+              placeholder="Full name of the borrower"
+              value={formData.borrowerName}
+              onChange={handleChange}
+              className="h-12"
+              required
+            />
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="interestRate" className="required">Interest Rate (%)</Label>
+              <Input
+                id="interestRate"
+                name="interestRate"
+                type="number"
+                placeholder="5.0"
+                value={formData.interestRate}
+                onChange={handleChange}
+                className="h-12"
+                required
+                min="0"
+                step="0.1"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="term" className="required">Term (months)</Label>
+              <Input
+                id="term"
+                name="term"
+                type="number"
+                placeholder="12"
+                value={formData.term}
+                onChange={handleChange}
+                className="h-12"
+                required
+                min="1"
+                step="1"
+              />
+            </div>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 const LoginForm = () => {
   const navigate = useNavigate();
@@ -26,25 +27,21 @@ const LoginForm = () => {
     setIsLoading(true);
     
     try {
-      // Simulating API call for login
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
       
-      // Demo login - for production, this would connect to a real auth API
-      if (email === 'demo@example.com' && password === 'password') {
-        // Store dummy user data
-        localStorage.setItem('user', JSON.stringify({ 
-          id: '1', 
-          name: 'Demo User', 
-          email: 'demo@example.com' 
-        }));
-        
+      if (error) {
+        throw error;
+      }
+      
+      if (data.user) {
         toast.success('Login successful');
         navigate('/dashboard');
-      } else {
-        toast.error('Invalid credentials');
       }
-    } catch (error) {
-      toast.error('Login failed');
+    } catch (error: any) {
+      toast.error(`Login failed: ${error.message}`);
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -121,12 +118,6 @@ const LoginForm = () => {
               'Sign in'
             )}
           </Button>
-          <div className="text-center text-sm">
-            For demo, use:
-            <div className="font-mono text-muted-foreground mt-1">
-              demo@example.com / password
-            </div>
-          </div>
         </form>
       </CardContent>
       <CardFooter className="flex justify-center">
