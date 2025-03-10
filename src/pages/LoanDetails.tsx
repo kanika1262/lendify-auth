@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -19,7 +18,6 @@ const LoanDetails = () => {
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [newStatus, setNewStatus] = useState<'approved' | 'rejected' | null>(null);
   
-  // Check if user is logged in and fetch loan data
   useEffect(() => {
     const user = localStorage.getItem('user');
     if (!user) {
@@ -236,7 +234,6 @@ const LoanDetails = () => {
         </div>
       </main>
       
-      {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -265,7 +262,6 @@ const LoanDetails = () => {
         </DialogContent>
       </Dialog>
       
-      {/* Status Change Dialog */}
       <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
         <DialogContent>
           <DialogHeader>

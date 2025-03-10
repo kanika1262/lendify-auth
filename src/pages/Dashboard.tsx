@@ -30,7 +30,7 @@ const Dashboard = () => {
       setLoans(JSON.parse(loansData));
     } else {
       // Add sample loans for demo purposes
-      const sampleLoans = [
+      const sampleLoans: Loan[] = [
         {
           id: '1',
           amount: 5000,

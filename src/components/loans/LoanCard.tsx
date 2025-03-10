@@ -10,8 +10,10 @@ export interface Loan {
   amount: number;
   status: 'pending' | 'approved' | 'rejected' | 'paid';
   purpose: string;
+  description?: string;
   createdAt: string;
   dueDate: string;
+  loanType?: string;
 }
 
 interface LoanCardProps {
