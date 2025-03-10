@@ -14,6 +14,7 @@ export type Database = {
           amount: number
           borrower_name: string
           created_at: string
+          description: string | null
           id: string
           interest_rate: number
           purpose: string
@@ -27,6 +28,7 @@ export type Database = {
           amount: number
           borrower_name: string
           created_at?: string
+          description?: string | null
           id?: string
           interest_rate: number
           purpose: string
@@ -40,6 +42,7 @@ export type Database = {
           amount?: number
           borrower_name?: string
           created_at?: string
+          description?: string | null
           id?: string
           interest_rate?: number
           purpose?: string

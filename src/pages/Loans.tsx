@@ -51,7 +51,7 @@ const Loans = () => {
         amount: loan.amount,
         purpose: loan.purpose,
         status: loan.status as 'pending' | 'approved' | 'rejected' | 'paid',
-        description: loan.description || '', // Add fallback for null/undefined description
+        description: loan.description || '', // Fixed: providing empty string as fallback
         createdAt: loan.created_at,
         dueDate: loan.start_date, // Using start_date as dueDate
         loanType: loan.purpose, // Using purpose as loanType temporarily

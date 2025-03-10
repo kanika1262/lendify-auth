@@ -51,7 +51,7 @@ const Dashboard = () => {
         amount: loan.amount,
         purpose: loan.purpose,
         status: loan.status as 'pending' | 'approved' | 'rejected' | 'paid',
-        description: loan.description || '', // Add fallback for null/undefined description
+        description: loan.description || '', // Using null coalescing operator to handle undefined
         createdAt: loan.created_at,
         dueDate: loan.start_date, // Using start_date as dueDate
         loanType: loan.purpose, // Using purpose as loanType temporarily
