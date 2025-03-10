@@ -7,49 +7,75 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import Navbar from '@/components/layout/Navbar';
 import LoanCard, { Loan } from '@/components/loans/LoanCard';
 import { PlusCircle, Search } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
 
 const Loans = () => {
   const navigate = useNavigate();
-  const [loans, setLoans] = useState<Loan[]>([]);
-  const [filteredLoans, setFilteredLoans] = useState<Loan[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [user, setUser] = useState<any>(null);
   
   // Check if user is logged in
   useEffect(() => {
-    const user = localStorage.getItem('user');
-    if (!user) {
-      navigate('/login');
-      return;
-    }
+    const checkUser = async () => {
+      const { data } = await supabase.auth.getSession();
+      
+      if (!data.session) {
+        navigate('/login');
+        return;
+      }
+      
+      setUser({
+        id: data.session.user.id,
+      });
+    };
     
-    // Fetch loans from localStorage
-    const loansData = localStorage.getItem('loans');
-    if (loansData) {
-      const parsedLoans = JSON.parse(loansData);
-      setLoans(parsedLoans);
-      setFilteredLoans(parsedLoans);
-    }
+    checkUser();
   }, [navigate]);
   
+  // Fetch loans from Supabase
+  const { data: loans = [], isLoading } = useQuery({
+    queryKey: ['loans'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('loans')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      // Transform the data to match our Loan interface
+      return data.map(loan => ({
+        id: loan.id,
+        amount: loan.amount,
+        purpose: loan.purpose,
+        status: loan.status as 'pending' | 'approved' | 'rejected' | 'paid',
+        description: loan.description,
+        createdAt: loan.created_at,
+        dueDate: loan.start_date, // Using start_date as dueDate
+        loanType: loan.purpose, // Using purpose as loanType temporarily
+        interest_rate: loan.interest_rate,
+        term: loan.term,
+        borrower_name: loan.borrower_name
+      }));
+    },
+    enabled: !!user,
+  });
+  
   // Filter loans based on search term and status
-  useEffect(() => {
-    let result = loans;
-    
+  const filteredLoans = loans?.filter(loan => {
     // Apply search filter
-    if (searchTerm) {
-      result = result.filter(loan => 
-        loan.purpose.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
+    const matchesSearch = !searchTerm || 
+      loan.purpose.toLowerCase().includes(searchTerm.toLowerCase());
     
     // Apply status filter
-    if (statusFilter !== 'all') {
-      result = result.filter(loan => loan.status === statusFilter);
-    }
+    const matchesStatus = statusFilter === 'all' || loan.status === statusFilter;
     
-    setFilteredLoans(result);
-  }, [loans, searchTerm, statusFilter]);
+    return matchesSearch && matchesStatus;
+  }) || [];
+  
+  if (!user) return null;
   
   return (
     <div className="min-h-screen flex flex-col">
@@ -97,7 +123,11 @@ const Loans = () => {
             </div>
           </div>
           
-          {filteredLoans.length > 0 ? (
+          {isLoading ? (
+            <div className="text-center py-20">
+              <p className="text-muted-foreground">Loading your loan data...</p>
+            </div>
+          ) : filteredLoans.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
               {filteredLoans.map((loan) => (
                 <LoanCard key={loan.id} loan={loan} />

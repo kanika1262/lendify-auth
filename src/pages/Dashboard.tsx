@@ -8,75 +8,60 @@ import RecentLoans from '@/components/dashboard/RecentLoans';
 import Chart from '@/components/dashboard/Chart';
 import { Loan } from '@/components/loans/LoanCard';
 import { PlusCircle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [loans, setLoans] = useState<Loan[]>([]);
   const [user, setUser] = useState<any>(null);
   
   // Check if user is logged in
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (!userData) {
-      navigate('/login');
-      return;
-    }
-    
-    setUser(JSON.parse(userData));
-    
-    // Fetch loans from localStorage
-    const loansData = localStorage.getItem('loans');
-    if (loansData) {
-      setLoans(JSON.parse(loansData));
-    } else {
-      // Add sample loans for demo purposes
-      const sampleLoans: Loan[] = [
-        {
-          id: '1',
-          amount: 5000,
-          purpose: 'Home Renovation',
-          status: 'approved',
-          createdAt: new Date('2023-01-15').toISOString(),
-          dueDate: new Date('2023-07-15').toISOString(),
-        },
-        {
-          id: '2',
-          amount: 2000,
-          purpose: 'Education',
-          status: 'pending',
-          createdAt: new Date('2023-02-20').toISOString(),
-          dueDate: new Date('2023-08-20').toISOString(),
-        },
-        {
-          id: '3',
-          amount: 10000,
-          purpose: 'Business Expansion',
-          status: 'rejected',
-          createdAt: new Date('2023-03-10').toISOString(),
-          dueDate: new Date('2023-09-10').toISOString(),
-        },
-        {
-          id: '4',
-          amount: 3000,
-          purpose: 'Medical Expenses',
-          status: 'approved',
-          createdAt: new Date('2023-04-05').toISOString(),
-          dueDate: new Date('2023-10-05').toISOString(),
-        },
-        {
-          id: '5',
-          amount: 7500,
-          purpose: 'Vehicle Purchase',
-          status: 'paid',
-          createdAt: new Date('2023-05-18').toISOString(),
-          dueDate: new Date('2023-11-18').toISOString(),
-        },
-      ];
+    const checkUser = async () => {
+      const { data } = await supabase.auth.getSession();
       
-      localStorage.setItem('loans', JSON.stringify(sampleLoans));
-      setLoans(sampleLoans);
-    }
+      if (!data.session) {
+        navigate('/login');
+        return;
+      }
+      
+      setUser({
+        id: data.session.user.id,
+        name: data.session.user.user_metadata.first_name || 'User',
+      });
+    };
+    
+    checkUser();
   }, [navigate]);
+  
+  // Fetch loans from Supabase
+  const { data: loans = [], isLoading } = useQuery({
+    queryKey: ['loans'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('loans')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      // Transform the data to match our Loan interface
+      return data.map(loan => ({
+        id: loan.id,
+        amount: loan.amount,
+        purpose: loan.purpose,
+        status: loan.status as 'pending' | 'approved' | 'rejected' | 'paid',
+        description: loan.description,
+        createdAt: loan.created_at,
+        dueDate: loan.start_date, // Using start_date as dueDate
+        loanType: loan.purpose, // Using purpose as loanType temporarily
+        interest_rate: loan.interest_rate,
+        term: loan.term,
+        borrower_name: loan.borrower_name
+      }));
+    },
+    enabled: !!user,
+  });
   
   if (!user) return null;
   
@@ -101,12 +86,20 @@ const Dashboard = () => {
           </div>
           
           <div className="space-y-6">
-            <Stats loans={loans} />
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Chart loans={loans} />
-              <RecentLoans loans={loans} />
-            </div>
+            {isLoading ? (
+              <div className="text-center py-20">
+                <p className="text-muted-foreground">Loading your loan data...</p>
+              </div>
+            ) : (
+              <>
+                <Stats loans={loans} />
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Chart loans={loans} />
+                  <RecentLoans loans={loans} />
+                </div>
+              </>
+            )}
           </div>
         </div>
       </main>

@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -9,65 +10,113 @@ import Navbar from '@/components/layout/Navbar';
 import BlurContainer from '@/components/ui/BlurContainer';
 import { Loan } from '@/components/loans/LoanCard';
 import { AlertTriangle, ArrowLeft, Clock, Calendar, Edit, Trash2, DollarSign, CheckCircle, XCircle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const LoanDetails = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const [loan, setLoan] = useState<Loan | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [newStatus, setNewStatus] = useState<'approved' | 'rejected' | null>(null);
+  const queryClient = useQueryClient();
   
+  // Check if user is logged in
   useEffect(() => {
-    const user = localStorage.getItem('user');
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-    
-    const loansData = localStorage.getItem('loans');
-    if (loansData) {
-      const loans = JSON.parse(loansData);
-      const foundLoan = loans.find((l: Loan) => l.id === id);
-      
-      if (foundLoan) {
-        setLoan(foundLoan);
-      } else {
-        navigate('/loans');
-        toast.error('Loan not found');
+    const checkAuth = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) {
+        navigate('/login');
       }
-    }
-  }, [id, navigate]);
-  
-  const handleDelete = () => {
-    if (!id) return;
+    };
     
-    const loansData = localStorage.getItem('loans');
-    if (loansData) {
-      const loans = JSON.parse(loansData);
-      const updatedLoans = loans.filter((l: Loan) => l.id !== id);
+    checkAuth();
+  }, [navigate]);
+  
+  // Fetch loan details from Supabase
+  const { data: loan, isLoading } = useQuery({
+    queryKey: ['loan', id],
+    queryFn: async () => {
+      if (!id) throw new Error('Loan ID is required');
       
-      localStorage.setItem('loans', JSON.stringify(updatedLoans));
+      const { data, error } = await supabase
+        .from('loans')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error) throw error;
+      if (!data) throw new Error('Loan not found');
+      
+      // Transform the data to match our Loan interface
+      return {
+        id: data.id,
+        amount: data.amount,
+        purpose: data.purpose,
+        status: data.status as 'pending' | 'approved' | 'rejected' | 'paid',
+        description: data.description,
+        createdAt: data.created_at,
+        dueDate: data.start_date,
+        loanType: data.purpose, // Using purpose as loanType temporarily
+        interest_rate: data.interest_rate,
+        term: data.term,
+        borrower_name: data.borrower_name
+      } as Loan;
+    }
+  });
+  
+  // Delete loan mutation
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!id) throw new Error('Loan ID is required');
+      
+      const { error } = await supabase
+        .from('loans')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
       toast.success('Loan deleted successfully');
       navigate('/loans');
+      queryClient.invalidateQueries({ queryKey: ['loans'] });
+    },
+    onError: (error) => {
+      toast.error(`Error deleting loan: ${error.message}`);
     }
+  });
+  
+  // Update loan status mutation
+  const updateStatusMutation = useMutation({
+    mutationFn: async (status: string) => {
+      if (!id) throw new Error('Loan ID is required');
+      
+      const { error } = await supabase
+        .from('loans')
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success(`Loan ${newStatus} successfully`);
+      setStatusDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['loan', id] });
+      queryClient.invalidateQueries({ queryKey: ['loans'] });
+    },
+    onError: (error) => {
+      toast.error(`Error updating loan status: ${error.message}`);
+    }
+  });
+  
+  const handleDelete = () => {
+    deleteMutation.mutate();
   };
   
   const handleStatusChange = () => {
-    if (!id || !newStatus) return;
-    
-    const loansData = localStorage.getItem('loans');
-    if (loansData) {
-      const loans = JSON.parse(loansData);
-      const updatedLoans = loans.map((l: Loan) => 
-        l.id === id ? { ...l, status: newStatus } : l
-      );
-      
-      localStorage.setItem('loans', JSON.stringify(updatedLoans));
-      setLoan(prev => prev ? { ...prev, status: newStatus } : null);
-      toast.success(`Loan ${newStatus} successfully`);
-      setStatusDialogOpen(false);
-    }
+    if (!newStatus) return;
+    updateStatusMutation.mutate(newStatus);
   };
   
   const formatDate = (dateString: string) => {
@@ -85,6 +134,21 @@ const LoanDetails = () => {
       currency: 'USD',
     }).format(amount);
   };
+  
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navbar />
+        <main className="flex-1 pt-24 pb-12 px-6">
+          <div className="container mx-auto max-w-4xl">
+            <div className="text-center py-20">
+              <p className="text-muted-foreground">Loading loan details...</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
   
   if (!loan) return null;
   
@@ -223,9 +287,10 @@ const LoanDetails = () => {
                     variant="outline"
                     className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
                     onClick={() => setDeleteDialogOpen(true)}
+                    disabled={deleteMutation.isPending}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    Delete Application
+                    {deleteMutation.isPending ? 'Deleting...' : 'Delete Application'}
                   </Button>
                 </CardContent>
               </Card>
@@ -249,14 +314,16 @@ const LoanDetails = () => {
             <Button
               variant="outline"
               onClick={() => setDeleteDialogOpen(false)}
+              disabled={deleteMutation.isPending}
             >
               Cancel
             </Button>
             <Button
               variant="destructive"
               onClick={handleDelete}
+              disabled={deleteMutation.isPending}
             >
-              Delete
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -276,14 +343,16 @@ const LoanDetails = () => {
             <Button
               variant="outline"
               onClick={() => setStatusDialogOpen(false)}
+              disabled={updateStatusMutation.isPending}
             >
               Cancel
             </Button>
             <Button
               variant={newStatus === 'approved' ? 'default' : 'destructive'}
               onClick={handleStatusChange}
+              disabled={updateStatusMutation.isPending}
             >
-              {newStatus === 'approved' ? 'Approve' : 'Reject'}
+              {updateStatusMutation.isPending ? 'Processing...' : (newStatus === 'approved' ? 'Approve' : 'Reject')}
             </Button>
           </DialogFooter>
         </DialogContent>
