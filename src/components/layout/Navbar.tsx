@@ -1,19 +1,47 @@
 
 import { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Home, LineChart, DollarSign, LogIn, UserPlus } from 'lucide-react';
+import { Home, LineChart, DollarSign, LogIn, UserPlus, LogOut } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 const Navbar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   
   // Check if user is logged in
   useEffect(() => {
-    const user = localStorage.getItem('user');
-    setIsLoggedIn(!!user);
-  }, [location]);
+    const checkUser = async () => {
+      const { data } = await supabase.auth.getSession();
+      setIsLoggedIn(!!data.session);
+    };
+    
+    checkUser();
+    
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setIsLoggedIn(!!session);
+      }
+    );
+    
+    return () => subscription.unsubscribe();
+  }, []);
+  
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      toast.success('Logged out successfully');
+      navigate('/');
+    } catch (error) {
+      console.error('Error logging out:', error);
+      toast.error('Error logging out');
+    }
+  };
   
   // Handle scroll effect
   useEffect(() => {
@@ -58,6 +86,14 @@ const Navbar = () => {
                 label="Loans" 
                 active={location.pathname === '/loans'} 
               />
+              <Button 
+                variant="ghost" 
+                className="flex items-center space-x-1 h-9 px-3 hover:bg-accent hover:text-accent-foreground"
+                onClick={handleLogout}
+              >
+                <LogOut size={18} />
+                <span className="ml-1">Logout</span>
+              </Button>
             </>
           ) : (
             <>

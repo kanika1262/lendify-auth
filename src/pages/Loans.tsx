@@ -9,12 +9,14 @@ import LoanCard, { Loan } from '@/components/loans/LoanCard';
 import { PlusCircle, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 const Loans = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [user, setUser] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
   
   // Check if user is logged in
   useEffect(() => {
@@ -22,6 +24,7 @@ const Loans = () => {
       const { data } = await supabase.auth.getSession();
       
       if (!data.session) {
+        toast.error('Please login to access this page');
         navigate('/login');
         return;
       }
@@ -29,13 +32,25 @@ const Loans = () => {
       setUser({
         id: data.session.user.id,
       });
+      setIsLoading(false);
     };
     
     checkUser();
+    
+    // Set up auth state listener to detect sign-outs
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === 'SIGNED_OUT') {
+          navigate('/login');
+        }
+      }
+    );
+    
+    return () => subscription.unsubscribe();
   }, [navigate]);
   
   // Fetch loans from Supabase
-  const { data: loans = [], isLoading } = useQuery({
+  const { data: loans = [], isLoading: loansLoading } = useQuery({
     queryKey: ['loans'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -75,7 +90,11 @@ const Loans = () => {
     return matchesSearch && matchesStatus;
   }) || [];
   
-  if (!user) return null;
+  if (isLoading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <p className="text-muted-foreground">Loading...</p>
+    </div>
+  );
   
   return (
     <div className="min-h-screen flex flex-col">
@@ -123,7 +142,7 @@ const Loans = () => {
             </div>
           </div>
           
-          {isLoading ? (
+          {loansLoading ? (
             <div className="text-center py-20">
               <p className="text-muted-foreground">Loading your loan data...</p>
             </div>

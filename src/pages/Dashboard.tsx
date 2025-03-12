@@ -10,10 +10,12 @@ import { Loan } from '@/components/loans/LoanCard';
 import { PlusCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
   
   // Check if user is logged in
   useEffect(() => {
@@ -21,6 +23,7 @@ const Dashboard = () => {
       const { data } = await supabase.auth.getSession();
       
       if (!data.session) {
+        toast.error('Please login to access this page');
         navigate('/login');
         return;
       }
@@ -29,13 +32,25 @@ const Dashboard = () => {
         id: data.session.user.id,
         name: data.session.user.user_metadata.first_name || 'User',
       });
+      setIsLoading(false);
     };
     
     checkUser();
+    
+    // Set up auth state listener to detect sign-outs
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === 'SIGNED_OUT') {
+          navigate('/login');
+        }
+      }
+    );
+    
+    return () => subscription.unsubscribe();
   }, [navigate]);
   
   // Fetch loans from Supabase
-  const { data: loans = [], isLoading } = useQuery({
+  const { data: loans = [], isLoading: loansLoading } = useQuery({
     queryKey: ['loans'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -63,7 +78,11 @@ const Dashboard = () => {
     enabled: !!user,
   });
   
-  if (!user) return null;
+  if (isLoading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <p className="text-muted-foreground">Loading...</p>
+    </div>
+  );
   
   return (
     <div className="min-h-screen flex flex-col">
@@ -86,7 +105,7 @@ const Dashboard = () => {
           </div>
           
           <div className="space-y-6">
-            {isLoading ? (
+            {loansLoading ? (
               <div className="text-center py-20">
                 <p className="text-muted-foreground">Loading your loan data...</p>
               </div>
